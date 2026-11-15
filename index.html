@@ -31,7 +31,7 @@
   <main>
     <section class="hero">
       <h1>Gute Dinge, schnell geliefert.</h1>
-      <p>Ein Prototyp, der 20 Animations- &amp; UX-Prinzipien sichtbar macht. Klick oben auf <b>ⓘ</b>, um sie einzublenden.</p>
+      <p>Ein Prototyp, der 20 Animations- &amp; UX-Prinzipien sichtbar macht. Über <b>ⓘ</b> oben blendest du sie ein.</p>
     </section>
 
     <!-- Hick's Law: nur wenige Kategorien -->
@@ -46,6 +46,8 @@
 
   <!-- Produkt-Detail -->
   <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden data-principle="Staging · Hick's Law">
+    <!-- Handy: Griff zum Herunterziehen (Follow through) -->
+    <div class="sheet-handle" aria-hidden="true"></div>
     <button class="icon-btn hit close" data-close aria-label="Schließen">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
@@ -87,11 +89,11 @@
         <form id="addrForm" class="form" novalidate>
           <fieldset>
             <legend>Lieferadresse</legend>
-            <label>Name<input name="name" autocomplete="name" required /></label>
-            <label>Straße &amp; Nr.<input name="street" autocomplete="street-address" required /></label>
+            <label>Name<input id="f-name" name="name" autocomplete="name" enterkeyhint="next" required /></label>
+            <label>Straße &amp; Nr.<input id="f-street" name="street" autocomplete="street-address" enterkeyhint="next" required /></label>
             <div class="row">
-              <label class="w-sm" data-principle="Postel's Law">PLZ<input name="zip" inputmode="numeric" autocomplete="postal-code" placeholder="z. B. 10115" required /></label>
-              <label>Ort<input name="city" autocomplete="address-level2" required /></label>
+              <label class="w-sm" data-principle="Postel's Law">PLZ<input id="f-zip" name="zip" inputmode="numeric" autocomplete="postal-code" placeholder="z. B. 10115" enterkeyhint="next" required /></label>
+              <label>Ort<input id="f-city" name="city" autocomplete="address-level2" enterkeyhint="done" required /></label>
             </div>
           </fieldset>
         </form>
@@ -103,11 +105,11 @@
           <fieldset>
             <legend>Zahlung</legend>
             <label data-principle="Postel's Law">Kartennummer
-              <input name="card" inputmode="numeric" autocomplete="cc-number" placeholder="4242-4242 4242 4242" required />
+              <input id="f-card" name="card" inputmode="numeric" autocomplete="cc-number" placeholder="4242-4242 4242 4242" enterkeyhint="next" required />
             </label>
             <div class="row">
-              <label>Gültig bis<input name="exp" inputmode="numeric" autocomplete="cc-exp" placeholder="MM/JJ" required /></label>
-              <label class="w-sm">CVC<input name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" required /></label>
+              <label>Gültig bis<input id="f-exp" name="exp" inputmode="numeric" autocomplete="cc-exp" placeholder="MM/JJ" enterkeyhint="next" required /></label>
+              <label class="w-sm">CVC<input id="f-cvc" name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" enterkeyhint="done" required /></label>
             </div>
           </fieldset>
         </form>
@@ -138,6 +140,16 @@
       <button class="btn primary" id="successClose">Weiter shoppen</button>
     </div>
   </div>
+
+  <!-- Fitts's Law: Warenkorb in der Daumenzone (nur Handy) -->
+  <button class="cart-bar" id="cartBar" hidden data-principle="Fitts's Law · Daumenzone">
+    <span class="cb-icon">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6.2"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>
+      <span class="cb-count" id="cartBarCount">0</span>
+    </span>
+    <span class="cb-text"><span class="cb-items" id="cartBarItems">0 Artikel</span><span class="cb-sum" id="cartBarSum">0,00 €</span></span>
+    <span class="cb-cta">Zur Kasse<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span>
+  </button>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="fx-layer" id="fx" aria-hidden="true"></div>
