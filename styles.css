@@ -359,6 +359,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 0 16px 80px; }
 .form input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .form input.invalid { border-color: var(--heart); }
 .form input.valid { border-color: var(--ok); }
+.form .err { font-size: 12px; font-weight: 500; color: var(--heart); }
+.form .err:empty { display: none; }
 
 /* ---------- Success ---------- */
 .success { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgb(20 15 10 / .5); backdrop-filter: blur(8px); }

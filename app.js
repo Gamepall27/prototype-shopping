@@ -490,8 +490,10 @@
     el.next.focus({ preventScroll: true });
   }
 
+  let payTimer = null;
   async function closeDrawer() {
     if (el.drawer.hidden) return;
+    if (payTimer) { clearTimeout(payTimer); payTimer = null; updateStepUI(); } // Zahlung abgebrochen
     openLayer = null;
     hideScrim();
     await anim(el.drawer, [{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }], { duration: 180, easing: EASE.in }).finished;
@@ -554,9 +556,36 @@
     city: v => v.length >= 2,
     zip: v => /^\d{5}$/.test(v),
     card: v => /^\d{13,19}$/.test(v.replace(/\s/g, '')),
-    exp: v => { const m = /^(\d{2})\/(\d{2})$/.exec(v); return !!m && +m[1] >= 1 && +m[1] <= 12; },
+    exp: v => {
+      const m = /^(\d{2})\/(\d{2})$/.exec(v);
+      if (!m || +m[1] < 1 || +m[1] > 12) return false;
+      const now = new Date(), y = 2000 + +m[2], cy = now.getFullYear();
+      return y > cy || (y === cy && +m[1] >= now.getMonth() + 1); // nicht abgelaufen
+    },
     cvc: v => /^\d{3,4}$/.test(v),
   };
+
+  const ERRORS = {
+    name: 'Bitte gib deinen Namen ein.',
+    street: 'Bitte Straße mit Hausnummer angeben.',
+    city: 'Bitte gib einen Ort ein.',
+    zip: 'Die PLZ braucht 5 Ziffern.',
+    card: 'Die Kartennummer braucht 13 bis 19 Ziffern.',
+    exp: 'Bitte ein gültiges, nicht abgelaufenes Datum (MM/JJ).',
+    cvc: 'Die CVC hat 3 oder 4 Ziffern.',
+  };
+  function setError(input, msg) {
+    let err = input.parentElement.querySelector('.err');
+    if (!err) {
+      err = document.createElement('span');
+      err.className = 'err';
+      err.id = 'err-' + input.name;
+      input.after(err);
+      input.setAttribute('aria-describedby', err.id);
+    }
+    err.textContent = msg;
+    input.setAttribute('aria-invalid', msg ? 'true' : 'false');
+  }
 
   function cleanField(input) {
     const f = input.name;
@@ -566,6 +595,7 @@
     const ok = VALID[f](input.value);
     input.classList.toggle('valid', ok);
     input.classList.toggle('invalid', !ok && input.value !== '');
+    setError(input, ok ? '' : input.value === '' ? 'Bitte ausfüllen.' : ERRORS[f]);
     return ok;
   }
 
@@ -579,6 +609,8 @@
         { transform: 'translateX(-4px)' }, { transform: 'translateX(2px)' }, { transform: 'translateX(0)' },
       ], { duration: 280, easing: EASE.out });
       firstBad.focus();
+      // role=status-Toast sagt den Fehler für Screenreader an
+      toast(firstBad.value && ERRORS[firstBad.name] ? ERRORS[firstBad.name] : 'Bitte fülle die markierten Felder aus.');
       return false;
     }
     return true;
@@ -613,7 +645,7 @@
     await anim(el.success, [{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: EASE.in }).finished;
     el.success.hidden = true;
     document.body.classList.remove('locked');
-    $$('#addrForm input, #payForm input').forEach(i => { i.value = ''; i.classList.remove('valid', 'invalid'); });
+    $$('#addrForm input, #payForm input').forEach(i => { i.value = ''; i.classList.remove('valid', 'invalid'); setError(i, ''); });
     state.step = 0;
   }
 
@@ -666,7 +698,20 @@
 
   el.scrim.addEventListener('click', () => openLayer === 'modal' ? closeModal() : closeDrawer());
   $$('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('.modal') ? closeModal() : closeDrawer()));
+  const FOCUSABLE = 'button:not([disabled]):not([hidden]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+  function trapFocus(e) {
+    const box = !el.success.hidden ? el.success : openLayer === 'modal' ? el.modal : openLayer === 'drawer' ? el.drawer : null;
+    if (!box) return;
+    const items = $$(FOCUSABLE, box).filter(x => x.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (!box.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+
   document.addEventListener('keydown', e => {
+    if (e.key === 'Tab') return trapFocus(e);
     if (e.key !== 'Escape') return;
     if (!el.success.hidden) return closeSuccess();
     if (openLayer === 'modal') closeModal();
@@ -681,7 +726,10 @@
     if (item.qty <= 0) {
       const li = b.closest('.cart-item');
       anim(li, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(40px)' }], { duration: 180, easing: EASE.in })
-        .finished.then(() => { state.cart = state.cart.filter(i => i !== item); saveCart(); renderCart(); toast('Artikel entfernt'); });
+        .finished.then(() => {
+          if (item.qty > 0 || !state.cart.includes(item)) return; // während der Animation wieder erhöht
+          state.cart = state.cart.filter(i => i !== item); saveCart(); renderCart(); toast('Artikel entfernt');
+        });
       return;
     }
     saveCart(); renderCart(); // bewusst ohne Animation – wird sehr oft benutzt
@@ -690,10 +738,12 @@
   $$('#addrForm input, #payForm input').forEach(i => {
     i.addEventListener('blur', () => { if (i.value) cleanField(i); });
     if (i.name === 'card') i.addEventListener('input', () => {
-      // sanft live formatieren, Cursor ans Ende
-      const atEnd = i.selectionStart === i.value.length;
+      // live formatieren, Cursor an derselben Ziffer halten
+      const digitsBefore = i.value.slice(0, i.selectionStart).replace(/\D/g, '').length;
       i.value = CLEAN.card(i.value);
-      if (atEnd) i.setSelectionRange(i.value.length, i.value.length);
+      let pos = 0, seen = 0;
+      while (pos < i.value.length && seen < digitsBefore) { if (/\d/.test(i.value[pos])) seen++; pos++; }
+      i.setSelectionRange(pos, pos);
     });
   });
   $$('#addrForm, #payForm').forEach(f => f.addEventListener('submit', e => { e.preventDefault(); el.next.click(); }));
@@ -705,7 +755,7 @@
       squash(el.next, .3);
       el.next.textContent = 'Wird bezahlt …';
       el.next.disabled = true;
-      setTimeout(() => { el.next.disabled = false; celebrate(); }, 380); // < 400 ms (Doherty)
+      payTimer = setTimeout(() => { payTimer = null; el.next.disabled = false; celebrate(); }, 380); // < 400 ms (Doherty)
     }
   });
   el.back.addEventListener('click', () => setStep(state.step - 1));
