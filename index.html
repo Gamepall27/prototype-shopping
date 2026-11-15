@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kiosk – Prototyp-Shop</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Jakob's Law: Logo links, Suche mittig, Warenkorb rechts -->
+  <header class="topbar">
+    <a class="logo" href="#" aria-label="Kiosk Startseite"><span class="logo-mark">K</span>Kiosk</a>
+
+    <label class="search" data-principle="Postel's Law">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search" type="search" placeholder="Suchen … (Tippfehler erlaubt)" autocomplete="off" />
+    </label>
+
+    <div class="topbar-actions">
+      <button id="principlesToggle" class="icon-btn hit" aria-pressed="false" title="Prinzipien anzeigen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+      </button>
+      <button id="cartBtn" class="cart-btn" aria-label="Warenkorb öffnen" data-principle="Fitts's Law · Squash &amp; Stretch">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6.2"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>
+        <span>Warenkorb</span>
+        <span id="cartBadge" class="badge" hidden>0</span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Gute Dinge, schnell geliefert.</h1>
+      <p>Ein Prototyp, der 20 Animations- &amp; UX-Prinzipien sichtbar macht. Klick oben auf <b>ⓘ</b>, um sie einzublenden.</p>
+    </section>
+
+    <!-- Hick's Law: nur wenige Kategorien -->
+    <nav class="chips" id="chips" aria-label="Kategorien" data-principle="Hick's Law"></nav>
+
+    <section class="grid" id="grid" aria-live="polite" data-principle="Doherty · Solid Drawing 3D"></section>
+    <p class="empty" id="empty" hidden>Nichts gefunden. Versuch es mit „Kaffee“ oder „Tasche“.</p>
+  </main>
+
+  <!-- Staging: Overlay dimmt + blurt alles andere -->
+  <div class="scrim" id="scrim" hidden></div>
+
+  <!-- Produkt-Detail -->
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden data-principle="Staging · Hick's Law">
+    <button class="icon-btn hit close" data-close aria-label="Schließen">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <div class="modal-media" id="modalMedia"></div>
+    <div class="modal-body">
+      <p class="eyebrow" id="modalCat"></p>
+      <h2 id="modalTitle"></h2>
+      <p class="muted" id="modalDesc"></p>
+      <div class="variants" id="modalVariants"></div>
+      <div class="modal-foot">
+        <span class="price big" id="modalPrice"></span>
+        <button class="btn primary add" id="modalAdd">In den Warenkorb</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Warenkorb-Drawer (rechts, wie gewohnt) -->
+  <aside class="drawer" id="drawer" aria-label="Warenkorb" hidden data-principle="Follow Through · Miller's Law">
+    <header class="drawer-head">
+      <h2 id="drawerTitle">Warenkorb</h2>
+      <button class="icon-btn hit" data-close aria-label="Schließen">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+
+    <ol class="steps" id="steps" aria-label="Fortschritt">
+      <li class="active">Warenkorb</li><li>Adresse</li><li>Zahlung</li>
+    </ol>
+
+    <div class="drawer-body">
+      <!-- Schritt 1 -->
+      <section class="step" data-step="0">
+        <ul class="cart-list" id="cartList"></ul>
+        <p class="empty small" id="cartEmpty">Dein Warenkorb ist leer.</p>
+      </section>
+
+      <!-- Schritt 2 -->
+      <section class="step" data-step="1" hidden>
+        <form id="addrForm" class="form" novalidate>
+          <fieldset>
+            <legend>Lieferadresse</legend>
+            <label>Name<input name="name" autocomplete="name" required /></label>
+            <label>Straße &amp; Nr.<input name="street" autocomplete="street-address" required /></label>
+            <div class="row">
+              <label class="w-sm" data-principle="Postel's Law">PLZ<input name="zip" inputmode="numeric" autocomplete="postal-code" placeholder="z. B. 10115" required /></label>
+              <label>Ort<input name="city" autocomplete="address-level2" required /></label>
+            </div>
+          </fieldset>
+        </form>
+      </section>
+
+      <!-- Schritt 3 -->
+      <section class="step" data-step="2" hidden>
+        <form id="payForm" class="form" novalidate>
+          <fieldset>
+            <legend>Zahlung</legend>
+            <label data-principle="Postel's Law">Kartennummer
+              <input name="card" inputmode="numeric" autocomplete="cc-number" placeholder="4242-4242 4242 4242" required />
+            </label>
+            <div class="row">
+              <label>Gültig bis<input name="exp" inputmode="numeric" autocomplete="cc-exp" placeholder="MM/JJ" required /></label>
+              <label class="w-sm">CVC<input name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" required /></label>
+            </div>
+          </fieldset>
+        </form>
+      </section>
+    </div>
+
+    <!-- Fitts's Law: großer, fester Haupt-Button unten -->
+    <footer class="drawer-foot">
+      <div class="totals">
+        <span class="muted">Summe</span>
+        <span class="price big" id="cartTotal">0,00 €</span>
+      </div>
+      <div class="foot-actions">
+        <button class="btn ghost" id="backBtn" hidden>Zurück</button>
+        <button class="btn primary block" id="nextBtn" data-principle="Fitts's Law">Zur Kasse</button>
+      </div>
+    </footer>
+  </aside>
+
+  <!-- Erfolg -->
+  <div class="success" id="success" hidden role="dialog" aria-modal="true" aria-labelledby="successTitle">
+    <div class="success-card">
+      <div class="check" aria-hidden="true">
+        <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-15"/></svg>
+      </div>
+      <h2 id="successTitle">Bestellung aufgegeben!</h2>
+      <p class="muted">Danke! Das hier ist nur ein Prototyp – es wurde nichts bezahlt.</p>
+      <button class="btn primary" id="successClose">Weiter shoppen</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="fx-layer" id="fx" aria-hidden="true"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
