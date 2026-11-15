@@ -67,6 +67,7 @@
     cartList: $('#cartList'), cartEmpty: $('#cartEmpty'), cartTotal: $('#cartTotal'),
     steps: $('#steps'), next: $('#nextBtn'), back: $('#backBtn'),
     success: $('#success'), toast: $('#toast'), fx: $('#fx'),
+    cartBar: $('#cartBar'), cartBarCount: $('#cartBarCount'), cartBarItems: $('#cartBarItems'), cartBarSum: $('#cartBarSum'),
   };
 
   // ==========================================================
@@ -120,6 +121,9 @@
       `<button class="chip" aria-pressed="${c === state.cat}" data-cat="${c}">${c}</button>`).join('');
   }
 
+  const PLUS_ICON = '<svg class="add-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+  const ADDED_HTML = '<span class="add-label">✓ Drin</span><svg class="add-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+
   function cardHTML(p, i) {
     const tag = (txt) => i === 0 ? ` data-principle="${txt}"` : '';
     return `
@@ -131,7 +135,7 @@
           <p class="card-sub">${p.cat}${p.colors ? ` · ${p.colors.length} Farben` : ''}${p.sizes ? ` · ${p.sizes.length} Größen` : ''}</p>
           <div class="card-foot">
             <span class="price">${fmt.format(p.price)}</span>
-            <button class="btn primary sm add"${tag('Anticipation · Arcs · Secondary')}>In den Korb</button>
+            <button class="btn primary sm add" aria-label="${p.name} in den Korb"${tag('Anticipation · Arcs · Secondary')}><span class="add-label">In den Korb</span>${PLUS_ICON}</button>
           </div>
         </div>
       </article>`;
@@ -147,6 +151,7 @@
         [{ opacity: 0, translate: '0 16px' }, { opacity: 1, translate: '0 0' }],
         { duration: 260, delay: Math.min(i, 8) * 35, fill: 'backwards' }));
     }
+    queueScrollTilt();
   }
 
   function renderSkeleton(n = 8) {
@@ -158,30 +163,79 @@
   }
 
   // ==========================================================
-  // Solid drawing in 3D: Tilt nach Mausposition
+  // Solid drawing in 3D: Karte kippt zur Maus bzw. zum Finger
   // ==========================================================
-  el.grid.addEventListener('pointermove', e => {
-    if (e.pointerType !== 'mouse' || reduceMotion.matches) return;
-    const card = e.target.closest('.card:not(.skeleton)');
-    if (!card) return;
+  function tiltTo(card, e, strength = 1) {
     const r = card.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
-    card.style.setProperty('--ry', `${(px - .5) * 10}deg`);
-    card.style.setProperty('--rx', `${(.5 - py) * 8}deg`);
+    const px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    const py = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    card.style.setProperty('--ry', `${(px - .5) * 10 * strength}deg`);
+    card.style.setProperty('--rx', `${(.5 - py) * 8 * strength}deg`);
     card.style.setProperty('--mx', `${px * 100}%`);
     card.style.setProperty('--my', `${py * 100}%`);
+  }
+  function untilt(card, spring) {
+    if (spring) { // Follow through: federt über die Ruhelage hinaus zurück
+      card.classList.add('release');
+      setTimeout(() => card.classList.remove('release'), 300);
+    }
+    card.classList.remove('pressing');
+    card.style.setProperty('--rx', '0deg');
+    card.style.setProperty('--ry', '0deg');
+  }
+  const cardAt = e => e.target.closest?.('.card:not(.skeleton)');
+
+  el.grid.addEventListener('pointermove', e => {
+    if (reduceMotion.matches) return;
+    const card = cardAt(e); if (!card) return;
+    if (e.pointerType === 'mouse') tiltTo(card, e);
+    else if (card.classList.contains('pressing')) tiltTo(card, e, 1.4);
   });
+  // Touch: Karte sinkt unter dem Finger ein und neigt sich zu ihm
+  el.grid.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || reduceMotion.matches) return;
+    // Auf Buttons kippt die Karte nicht: sonst rutscht der Button unter dem Finger weg
+    // und der Tipp landet auf der Karte statt auf dem Button.
+    if (e.target.closest('button')) return;
+    const card = cardAt(e); if (!card) return;
+    card.classList.add('pressing');
+    tiltTo(card, e, 1.4);
+  });
+  ['pointerup', 'pointercancel'].forEach(type => el.grid.addEventListener(type, e => {
+    const card = cardAt(e);
+    if (card && e.pointerType !== 'mouse') untilt(card, true);
+  }));
   el.grid.addEventListener('pointerout', e => {
     const card = e.target.closest('.card');
-    if (card && !card.contains(e.relatedTarget)) { card.style.setProperty('--rx', '0deg'); card.style.setProperty('--ry', '0deg'); }
+    if (card && !card.contains(e.relatedTarget)) untilt(card, e.pointerType !== 'mouse');
   });
+
+  // Touch-Geräte: Karten liegen auf einer leicht gewölbten Fläche und neigen sich beim Scrollen
+  const touchOnly = matchMedia('(hover: none)');
+  let scrollQueued = false;
+  function scrollTilt() {
+    scrollQueued = false;
+    const vh = innerHeight;
+    $$('.card:not(.skeleton)', el.grid).forEach(c => {
+      const r = c.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > vh) return;
+      const d = (r.top + r.height / 2 - vh / 2) / (vh / 2); // -1 oben … 1 unten
+      c.style.setProperty('--srx', `${(-d * 2).toFixed(2)}deg`);
+    });
+  }
+  function queueScrollTilt() {
+    if (!touchOnly.matches || reduceMotion.matches || scrollQueued) return;
+    scrollQueued = true;
+    requestAnimationFrame(scrollTilt);
+  }
+  addEventListener('scroll', queueScrollTilt, { passive: true });
 
   // ==========================================================
   // Effekte
   // ==========================================================
 
   /** Squash & stretch: zusammendrücken beim Aufprall, dann zurückfedern. */
-  function squash(target, amount = 1) {
+  function squash(target, amount = 1, duration = 280) {
     const a = .3 * amount;
     return anim(target, [
       { transform: 'scale(1, 1)' },
@@ -189,7 +243,7 @@
       { transform: `scale(${1 - a * .5}, ${1 + a * .5})`, offset: .55 },
       { transform: `scale(${1 + a * .15}, ${1 - a * .15})`, offset: .8 },
       { transform: 'scale(1, 1)' },
-    ], { duration: 280, easing: EASE.inOut });
+    ], { duration, easing: EASE.inOut });
   }
 
   /** Follow through: Teile schwingen nach und setzen sich. */
@@ -204,7 +258,7 @@
     return anim(target, [
       { transform: 'scale(1) translateY(0)' },
       { transform: 'scale(.92) translateY(2px)' },
-    ], { duration: 90, easing: EASE.in, fill: 'forwards' });
+    ], { duration: 80, easing: EASE.in, fill: 'forwards' });
   }
   function release(target) {
     return anim(target, [
@@ -214,10 +268,20 @@
     ], { duration: 220, easing: EASE.out });
   }
 
+  /** Ziel des Flugs: auf dem Handy die Warenkorb-Leiste unten, sonst der Button oben. */
+  function cartTarget() {
+    if (!isMobile()) return centerOf(el.cartBtn);
+    const bar = el.cartBar, wasHidden = bar.hidden;
+    if (wasHidden) { bar.style.visibility = 'hidden'; bar.hidden = false; } // Endposition messen
+    const c = centerOf($('.cb-icon', bar));
+    if (wasHidden) { bar.hidden = true; bar.style.visibility = ''; }
+    return c;
+  }
+
   /** Moving in arcs: Flug entlang einer quadratischen Bézierkurve. */
   function flyToCart(from, product) {
     if (reduceMotion.matches) return Promise.resolve();
-    const a = centerOf(from), b = centerOf(el.cartBtn);
+    const a = centerOf(from), b = cartTarget();
     const ctrl = { x: (a.x + b.x) / 2 + (b.x > a.x ? -60 : 60), y: Math.min(a.y, b.y) - 160 };
     const flyer = document.createElement('div');
     flyer.className = 'flyer';
@@ -235,14 +299,14 @@
       const stretch = 1 + Math.sin(t * Math.PI) * .18;
       frames.push({ transform: `translate(${x}px, ${y}px) rotate(${t * -25}deg) scale(${s * stretch}, ${s / stretch})`, offset: t });
     }
-    const flight = anim(flyer, frames, { duration: 300, easing: EASE.inOut });
+    const flight = anim(flyer, frames, { duration: 260, easing: EASE.inOut });
     return flight.finished.then(() => flyer.remove(), () => flyer.remove());
   }
 
   const CONFETTI = ['#ff5a36', '#f2c14e', '#7fd1a8', '#9d8df1', '#f59ab8', '#4a6fa5'];
 
   /** Secondary action: Partikel, die die Hauptaktion unterstreichen. */
-  function burst(x, y, { count = 10, spread = 60, colors = CONFETTI, duration = 520 } = {}) {
+  function burst(x, y, { count = 10, spread = 60, colors = CONFETTI, duration = 300 } = {}) {
     if (reduceMotion.matches) return;
     for (let i = 0; i < count; i++) {
       const p = document.createElement('span');
@@ -257,7 +321,7 @@
         { transform: `translate(${x}px, ${y}px) rotate(0) scale(1)`, opacity: 1 },
         { transform: `translate(${x + dx * .7}px, ${y + dy * .7 - 12}px) rotate(${180 * Math.random()}deg) scale(1)`, opacity: 1, offset: .6 },
         { transform: `translate(${x + dx}px, ${y + dy + 24}px) rotate(${360 * Math.random()}deg) scale(.4)`, opacity: 0 },
-      ], { duration: duration * (.8 + Math.random() * .4), easing: EASE.out }).finished.then(() => p.remove());
+      ], { duration: duration * (.8 + Math.random() * .2), easing: EASE.out }).finished.then(() => p.remove());
     }
   }
 
@@ -270,7 +334,7 @@
       { transform: `translate(${x}px, ${y}px) scale(.6)`, opacity: 0 },
       { transform: `translate(${x}px, ${y - 22}px) scale(1.2)`, opacity: 1, offset: .35 },
       { transform: `translate(${x}px, ${y - 40}px) scale(1)`, opacity: 0 },
-    ], { duration: 600, easing: EASE.out }).finished.then(() => t.remove());
+    ], { duration: 300, easing: EASE.out }).finished.then(() => t.remove());
   }
 
   function ring(x, y, color) {
@@ -281,7 +345,7 @@
     anim(r, [
       { transform: `translate(${x}px, ${y}px) scale(.3)`, opacity: 1, borderWidth: '6px' },
       { transform: `translate(${x}px, ${y}px) scale(1.8)`, opacity: 0, borderWidth: '1px' },
-    ], { duration: 420, easing: EASE.out }).finished.then(() => r.remove());
+    ], { duration: 280, easing: EASE.out }).finished.then(() => r.remove());
   }
 
   let toastTimer;
@@ -312,7 +376,7 @@
       ], { duration: 300, easing: EASE.out });
       const c = centerOf(btn);
       ring(c.x, c.y, '#e8336d');
-      burst(c.x, c.y, { count: 8, spread: 34, colors: ['#e8336d', '#ff8fb1', '#ffc2d4'], duration: 420 });
+      burst(c.x, c.y, { count: 8, spread: 34, colors: ['#e8336d', '#ff8fb1', '#ffc2d4'] });
     } else {
       anim(svg, [{ transform: 'scale(1)' }, { transform: 'scale(.8)' }, { transform: 'scale(1)' }], { duration: 160 });
     }
@@ -339,18 +403,39 @@
     return Object.keys(v).length ? v : null;
   }
 
-  function updateBadge({ bounce = false } = {}) {
-    const n = cartCount();
+  let barShown = false;
+  function toggleCartBar(show) {
+    if (show === barShown) return;
+    barShown = show;
+    document.body.classList.toggle('has-cartbar', show);
+    if (show) {
+      el.cartBar.hidden = false;
+      // Follow through: fährt hoch, schießt leicht über und setzt sich
+      anim(el.cartBar, [{ transform: 'translateY(140%)' }, { transform: 'translateY(-6px)', offset: .7 }, { transform: 'none' }], { duration: 300 });
+    } else {
+      anim(el.cartBar, [{ transform: 'none' }, { transform: 'translateY(140%)' }], { duration: 180, easing: EASE.in })
+        .finished.then(() => { if (!barShown) el.cartBar.hidden = true; });
+    }
+  }
+
+  function showCounts(n, sum, { bounce = false, quiet = false } = {}) {
     el.badge.textContent = n;
     el.badge.hidden = n === 0;
     el.cartBtn.setAttribute('aria-label', `Warenkorb öffnen, ${n} Artikel`);
-    if (bounce && n) {
-      squash(el.badge, 1.4);
-      wiggle($('svg', el.cartBtn));
-      const c = centerOf(el.badge);
-      plusOne(c.x, c.y - 10);
-      burst(c.x, c.y, { count: 10, spread: 40 });
-    }
+    el.cartBarCount.textContent = n;
+    el.cartBarItems.textContent = `${n} Artikel`;
+    el.cartBarSum.textContent = fmt.format(sum);
+    el.cartBar.setAttribute('aria-label', `Warenkorb öffnen, ${n} Artikel, ${fmt.format(sum)}`);
+    toggleCartBar(n > 0);
+    if (!bounce || !n) return;
+    const onBar = isMobile();
+    const count = onBar ? el.cartBarCount : el.badge;
+    if (quiet) { squash(count, .6, 200); return; } // Frequency of use: oft benutzt → kleine Geste
+    squash(count, 1.4, 240);
+    wiggle($('svg', onBar ? $('.cb-icon', el.cartBar) : el.cartBtn));
+    const c = centerOf(count);
+    plusOne(c.x, c.y - 10);
+    burst(c.x, c.y, { count: 10, spread: 40 });
   }
 
   function renderCart() {
@@ -377,29 +462,31 @@
     el.cartEmpty.hidden = state.cart.length > 0;
     el.cartTotal.textContent = fmt.format(cartSum());
     updateStepUI();
-    updateBadge();
+    showCounts(cartCount(), cartSum());
   }
 
+  let addsThisSession = 0;
   async function handleAdd(btn, id, variant, fromEl) {
     if (btn.dataset.busy) return;
     btn.dataset.busy = '1';
     const p = byId(id);
-    // Doherty threshold: Zustand sofort aktualisieren (optimistisch)
+    // Frequency of use: die ersten zwei Male die volle Show, danach ruhiger
+    const quiet = ++addsThisSession > 2;
+    // Doherty threshold: Zustand sofort aktualisieren (optimistisch), Zähler springt bei der Landung
     addToCart(id, variant);
-    el.badge.textContent = cartCount() - 1 || '';
-    el.badge.hidden = cartCount() - 1 === 0;
+    showCounts(cartCount() - 1, cartSum() - p.price);
 
     const w = windUp(btn);               // Anticipation
     await w.finished;
     w.cancel();
     release(btn);
-    squash(btn, .5);                      // Squash & stretch
-    const label = btn.textContent;
+    if (!quiet) squash(btn, .5);          // Squash & stretch
+    const prev = btn.innerHTML;
     btn.classList.add('added');
-    btn.textContent = '✓ Drin';
+    btn.innerHTML = btn.querySelector('.add-icon') ? ADDED_HTML : '✓ Drin';
     await flyToCart(fromEl || btn, p);   // Arc
-    updateBadge({ bounce: true });       // Follow through + Secondary action
-    setTimeout(() => { btn.classList.remove('added'); btn.textContent = label; delete btn.dataset.busy; }, 900);
+    showCounts(cartCount(), cartSum(), { bounce: true, quiet }); // Follow through + Secondary action
+    setTimeout(() => { btn.classList.remove('added'); btn.innerHTML = prev; delete btn.dataset.busy; }, 900);
   }
 
   // ==========================================================
@@ -414,7 +501,9 @@
     document.body.classList.add('locked');
   }
   async function hideScrim() {
-    await anim(el.scrim, [{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: EASE.in }).finished;
+    const from = el.scrim.style.opacity || 1; // nach einer Wischgeste schon halb ausgeblendet
+    el.scrim.style.opacity = '';
+    await anim(el.scrim, [{ opacity: from }, { opacity: 0 }], { duration: 160, easing: EASE.in }).finished;
     el.scrim.hidden = true;
     document.body.classList.remove('locked');
   }
@@ -453,8 +542,10 @@
     if (el.modal.hidden) return;
     openLayer = null;
     hideScrim();
+    const from = el.modal.style.transform || 'none';
+    el.modal.style.transform = '';
     await anim(el.modal, isMobile()
-      ? [{ transform: 'none' }, { transform: 'translateY(100%)' }]
+      ? [{ transform: from }, { transform: 'translateY(100%)' }]
       : [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.97) translateY(8px)' }],
       { duration: 160, easing: EASE.in }).finished;
     el.modal.hidden = true;
@@ -496,10 +587,72 @@
     if (payTimer) { clearTimeout(payTimer); payTimer = null; updateStepUI(); } // Zahlung abgebrochen
     openLayer = null;
     hideScrim();
-    await anim(el.drawer, [{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }], { duration: 180, easing: EASE.in }).finished;
+    const from = el.drawer.style.transform || 'translateX(0)';
+    el.drawer.style.transform = '';
+    await anim(el.drawer, [{ transform: from }, { transform: 'translateX(100%)' }], { duration: 180, easing: EASE.in }).finished;
     el.drawer.hidden = true;
     lastFocus?.focus?.({ preventScroll: true });
   }
+
+  // ==========================================================
+  // Gesten: Sheet nach unten, Drawer nach rechts wischen (Follow through)
+  // ==========================================================
+  function swipeToClose(panel, { axis, handles, canStart = () => true, onClose }) {
+    let start = null, dragging = false, d = 0, v = 0, lastT = 0, lastD = 0;
+    const size = () => (axis === 'y' ? panel.offsetHeight : panel.offsetWidth) || 1;
+    const move = px => {
+      panel.style.transform = axis === 'y' ? `translateY(${px}px)` : `translateX(${px}px)`;
+      el.scrim.style.opacity = String(Math.max(0, 1 - px / size()));
+    };
+    handles.forEach(h => h.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'touch' || !canStart(e)) return;
+      start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      dragging = false; d = 0; v = 0; lastD = 0; lastT = e.timeStamp;
+    }));
+    panel.addEventListener('pointermove', e => {
+      if (!start || e.pointerId !== start.id) return;
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      const main = axis === 'y' ? dy : dx, cross = axis === 'y' ? dx : dy;
+      if (!dragging) {
+        if (Math.abs(cross) > 10 && Math.abs(cross) > Math.abs(main)) { start = null; return; } // andere Richtung
+        if (main < 8) return;
+        dragging = true;
+        try { panel.setPointerCapture(e.pointerId); } catch { /* egal */ }
+        panel.getAnimations().forEach(a => a.cancel());
+      }
+      d = Math.max(0, main);
+      const dt = e.timeStamp - lastT;
+      if (dt > 0) { v = (d - lastD) / dt; lastD = d; lastT = e.timeStamp; }
+      move(d);
+    });
+    const end = e => {
+      if (!start || e.pointerId !== start.id) return;
+      const wasDragging = dragging;
+      start = null; dragging = false;
+      if (!wasDragging) return;
+      if (e.type === 'pointerup' && (d > Math.min(110, size() * .3) || v > .5)) return onClose();
+      // nicht weit genug: federt zurück
+      const from = panel.style.transform;
+      panel.style.transform = ''; el.scrim.style.opacity = '';
+      anim(panel, [{ transform: from }, { transform: 'none' }], { duration: 280, easing: EASE.spring });
+      anim(el.scrim, [{ opacity: Math.max(0, 1 - d / size()) }, { opacity: 1 }], { duration: 200 });
+    };
+    panel.addEventListener('pointerup', end);
+    panel.addEventListener('pointercancel', end);
+  }
+
+  swipeToClose(el.modal, {
+    axis: 'y',
+    handles: [$('.sheet-handle', el.modal), $('#modalMedia')],
+    canStart: () => isMobile() && el.modal.scrollTop <= 0,
+    onClose: closeModal,
+  });
+  swipeToClose(el.drawer, {
+    axis: 'x',
+    handles: [el.drawer],
+    canStart: e => !e.target.closest('input'),
+    onClose: closeDrawer,
+  });
 
   // ==========================================================
   // Checkout – Miller's Law (3 Schritte) & Postel's Law (Eingaben)
@@ -633,7 +786,7 @@
     anim($('.check path', card), [{ strokeDashoffset: 36 }, { strokeDashoffset: 0 }], { duration: 220, delay: 380, easing: EASE.out, fill: 'forwards' });
     setTimeout(() => {
       const c = centerOf($('.check', card));
-      burst(c.x, c.y, { count: 36, spread: 220, duration: 900 });
+      burst(c.x, c.y, { count: 36, spread: 220, duration: 900 }); // bewusste Ausnahme: seltenster Moment
       squash($('.check', card), .8);
     }, 420);
 
@@ -695,6 +848,7 @@
   });
 
   el.cartBtn.addEventListener('click', openDrawer);
+  el.cartBar.addEventListener('click', openDrawer);
 
   el.scrim.addEventListener('click', () => openLayer === 'modal' ? closeModal() : closeDrawer());
   $$('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('.modal') ? closeModal() : closeDrawer()));
@@ -737,6 +891,14 @@
 
   $$('#addrForm input, #payForm input').forEach(i => {
     i.addEventListener('blur', () => { if (i.value) cleanField(i); });
+    // Handy-Tastatur: "Weiter" springt ins nächste Feld, "Fertig" schließt den Schritt ab
+    i.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const inputs = $$('input', i.form);
+      const nx = inputs[inputs.indexOf(i) + 1];
+      nx ? nx.focus() : el.next.click();
+    });
     if (i.name === 'card') i.addEventListener('input', () => {
       // live formatieren, Cursor an derselben Ziffer halten
       const digitsBefore = i.value.slice(0, i.selectionStart).replace(/\D/g, '').length;
